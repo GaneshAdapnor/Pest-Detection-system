@@ -1,0 +1,58 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+ENV/
+.venv
+
+# Jupyter Notebook
+.ipynb_checkpoints
+
+# Model weights and large files
+*.pt
+*.pth
+*.h5
+*.onnx
+*.tflite
+*.weights
+
+# Dataset files (too large for git)
+datasets/
+*.jpg
+*.jpeg
+*.png
+*.txt
+!requirements.txt
+!README.txt
+*.cache
+labels.cache
+
+# Training outputs
+runs/
+wandb/
+*.log
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# OneDrive
+~$*
+
+# Large data files
+*.zip
+*.tar.gz
+*.rar
+

@@ -1,0 +1,27 @@
+path: "C:/Users/gadap/OneDrive/Projects/pest detection system/Pest detection -YOLOv8-.v1i.yolov8"
+train: "train/images"
+val: "valid/images"
+test: "test/images"
+
+nc: 12
+names:
+  - "Ants"
+  - "Bees"
+  - "Beetles"
+  - "Caterpillars"
+  - "Earthworms"
+  - "Earwigs"
+  - "Grasshoppers"
+  - "Moths"
+  - "Slugs"
+  - "Snails"
+  - "Wasps"
+  - "Weevils"
+
+roboflow:
+  workspace: "rotondwa-nemasetoni"
+  project: "pest-detection-yolov8"
+  version: 1
+  license: "CC BY 4.0"
+  url: "https://universe.roboflow.com/rotondwa-nemasetoni/pest-detection-yolov8/dataset/1"
+

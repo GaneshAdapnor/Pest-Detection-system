@@ -1,0 +1,39 @@
+# ==========================================================
+# YOLOv8 Pest Detection Dataset Configuration
+# ==========================================================
+
+# Train, validation, and test image folders (absolute paths)
+train: "C:/Users/gadap/OneDrive/Projects/pest detection system/Pest detection -YOLOv8-.v1i.yolov8/train/images"
+val: "C:/Users/gadap/OneDrive/Projects/pest detection system/Pest detection -YOLOv8-.v1i.yolov8/valid/images"
+test: "C:/Users/gadap/OneDrive/Projects/pest detection system/Pest detection -YOLOv8-.v1i.yolov8/test/images"
+
+# ==========================================================
+# Classes (12 pest types)
+# ==========================================================
+names:
+  0: ant
+  1: bee
+  2: beetle
+  3: caterpillar
+  4: earthworm
+  5: earwig
+  6: grasshopper
+  7: moth
+  8: slug
+  9: snail
+  10: wasp
+  11: weevil
+
+# ==========================================================
+# Training Settings
+# ==========================================================
+# Number of classes
+nc: 12
+
+# ==========================================================
+# Recommended Training Command
+# ==========================================================
+# Run this in your terminal:
+# yolo detect train data=pests.yaml model=yolov8s.pt epochs=100 imgsz=640 batch=16 name=pest_yolov8
+# ==========================================================
+

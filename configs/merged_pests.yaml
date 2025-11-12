@@ -1,0 +1,34 @@
+path: C:\Users\gadap\OneDrive\Projects\pest detection system\datasets\merged_pests
+train: train/images
+val: val/images
+test: test/images
+nc: 28
+names:
+  0: Ants
+  1: Bees
+  2: Beetles
+  3: Caterpillars
+  4: Earthworms
+  5: Earwigs
+  6: Grasshoppers
+  7: Moths
+  8: Slugs
+  9: Snails
+  10: Wasps
+  11: Weevils
+  12: Brown Plant Hopper
+  13: Rice Gall Midge
+  14: Rice Leaf Hopper
+  15: Rice Leaf Roller
+  16: Stem Borer
+  17: Black Bug
+  18: Brown plant hopper
+  19: Green Rice Hopper
+  20: Rice Bug
+  21: Rice Caseworm
+  22: Rice Grasshopper
+  23: Rice Stemborer
+  24: Rice Whorl Maggot
+  25: Rice leaf roller
+  26: RiceStink Bug
+  27: Yellow Rice Stemborer
