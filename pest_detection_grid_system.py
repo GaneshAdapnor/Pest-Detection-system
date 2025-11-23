@@ -67,10 +67,11 @@ CLASS_COLORS = {
     name: (color[0], color[1], color[2]) for name, color in CLASS_COLORS.items()
 }
 
-CONFIDENCE_THRESHOLD: float = 0.65
-NMS_IOU_THRESHOLD: float = 0.45
+CONFIDENCE_THRESHOLD: float = 0.70  # Higher threshold for more accurate detections
+NMS_IOU_THRESHOLD: float = 0.50  # Slightly higher to allow closer detections
 FULL_GRID_SIZE: int = 40
 MINI_GRID_CELLS: int = 4
+INFERENCE_SIZE: int = 640  # Optimized for speed while maintaining accuracy
 
 
 @dataclass
@@ -199,16 +200,38 @@ def load_model(specified_model: Optional[str]) -> YOLO:
     """Load YOLO model with preference for trained weights."""
     model_path = discover_best_model(specified_model)
     print(f"[INFO] Loading model from: {model_path}")
-    return YOLO(model_path)
+    model = YOLO(model_path)
+    
+    # Verify model class names match our expected classes
+    if hasattr(model, 'names') and model.names:
+        model_class_names = [model.names[i] for i in sorted(model.names.keys())]
+        print(f"[INFO] Model has {len(model_class_names)} classes: {model_class_names}")
+        
+        # Check if they match our CLASS_NAMES
+        if model_class_names != CLASS_NAMES:
+            print(f"[WARNING] Model class names don't match hardcoded CLASS_NAMES!")
+            print(f"  Model: {model_class_names}")
+            print(f"  Code:  {CLASS_NAMES}")
+            print(f"[INFO] Using model's class names for detection.")
+    
+    return model
 
 
 # ---------------------------------------------------------------------------
 # Detection Helpers
 # ---------------------------------------------------------------------------
 
-def extract_detections(results, confidence_threshold: float) -> List[Detection]:
+def extract_detections(results, confidence_threshold: float, model_names: Optional[Dict[int, str]] = None) -> List[Detection]:
     """Convert YOLO results into filtered Detection objects."""
     detections: List[Detection] = []
+    
+    # Use model's class names if available, otherwise use hardcoded CLASS_NAMES
+    if model_names:
+        # Convert model.names dict to list
+        max_class_id = max(model_names.keys()) if model_names else len(CLASS_NAMES) - 1
+        class_names_list = [model_names.get(i, f"Class_{i}") for i in range(max_class_id + 1)]
+    else:
+        class_names_list = CLASS_NAMES
 
     for result in results:
         boxes = result.boxes
@@ -221,8 +244,13 @@ def extract_detections(results, confidence_threshold: float) -> List[Detection]:
                 continue
 
             cls_id = int(box.cls.item())
-            if cls_id < 0 or cls_id >= len(CLASS_NAMES):
+            if cls_id < 0 or cls_id >= len(class_names_list):
                 continue  # Ignore classes outside our pest list
+            
+            # Validate class name is in our pest list
+            detected_class_name = class_names_list[cls_id]
+            if detected_class_name not in CLASS_NAMES:
+                continue  # Skip if not a pest class
 
             x1, y1, x2, y2 = box.xyxy[0].tolist()
             detections.append(
@@ -238,45 +266,87 @@ def extract_detections(results, confidence_threshold: float) -> List[Detection]:
 
 def draw_detection_annotations(frame: np.ndarray,
                                detections: Sequence[Detection],
-                               grid_cells: int = MINI_GRID_CELLS) -> np.ndarray:
+                               grid_cells: int = MINI_GRID_CELLS,
+                               model_names: Optional[Dict[int, str]] = None) -> np.ndarray:
     """Draw bounding boxes, labels, and mini-grids for detections."""
+    # Use model's class names if available
+    if model_names:
+        max_class_id = max(model_names.keys()) if model_names else len(CLASS_NAMES) - 1
+        class_names_list = [model_names.get(i, f"Class_{i}") for i in range(max_class_id + 1)]
+    else:
+        class_names_list = CLASS_NAMES
+    
     for det in detections:
-        class_name = CLASS_NAMES[det.class_id]
-        color = CLASS_COLORS[class_name]
+        # Get class name from the appropriate source
+        if det.class_id < len(class_names_list):
+            class_name = class_names_list[det.class_id]
+        else:
+            class_name = CLASS_NAMES[det.class_id] if det.class_id < len(CLASS_NAMES) else f"Class_{det.class_id}"
+        
+        # Ensure class_name exists in CLASS_COLORS, fallback to first color if not
+        if class_name not in CLASS_COLORS:
+            print(f"[WARNING] Class '{class_name}' not found in CLASS_COLORS, using default color")
+            color = (255, 255, 255)  # White as fallback
+        else:
+            color = CLASS_COLORS[class_name]
         x1, y1, x2, y2 = det.bbox
 
-        # Mini grid inside bounding box
+        # Expand grid area by 10% for better visibility
+        width = x2 - x1
+        height = y2 - y1
+        expand_factor = 0.10
+        pad_x = int(width * expand_factor / 2)
+        pad_y = int(height * expand_factor / 2)
+        
+        grid_x1 = max(0, x1 - pad_x)
+        grid_y1 = max(0, y1 - pad_y)
+        grid_x2 = min(frame.shape[1], x2 + pad_x)
+        grid_y2 = min(frame.shape[0], y2 + pad_y)
+
+        # Draw prominent grid around the pest (expanded area)
+        draw_box_grid(frame, grid_x1, grid_y1, grid_x2, grid_y2, 
+                     cells=grid_cells, color=color, thickness=2)
+        
+        # Draw border around the grid area
+        cv2.rectangle(frame, (grid_x1, grid_y1), (grid_x2, grid_y2), color, 3, lineType=cv2.LINE_AA)
+
+        # Mini grid inside bounding box (original area)
         draw_box_grid(frame, x1, y1, x2, y2, cells=grid_cells, color=color, thickness=1)
 
-        # Bounding box
-        cv2.rectangle(frame, (x1, y1), (x2, y2), color, 2, lineType=cv2.LINE_AA)
+        # Bounding box (thicker for visibility)
+        cv2.rectangle(frame, (x1, y1), (x2, y2), color, 3, lineType=cv2.LINE_AA)
 
-        # Text label with background
+        # Text label with background - make it more prominent
         label = f"{class_name} {det.confidence * 100:.1f}%"
         font = cv2.FONT_HERSHEY_SIMPLEX
-        font_scale = 0.6
+        font_scale = 0.8  # Increased from 0.6 for better visibility
         font_thickness = 2
 
         (text_width, text_height), baseline = cv2.getTextSize(label, font, font_scale, font_thickness)
         text_x = x1
-        text_y = max(20, y1 - 10)
+        text_y = max(30, y1 - 10)
 
-        bg_x1 = text_x
-        bg_y1 = text_y - text_height - baseline
-        bg_x2 = text_x + text_width + 6
-        bg_y2 = text_y + baseline
+        bg_x1 = text_x - 4
+        bg_y1 = text_y - text_height - baseline - 4
+        bg_x2 = text_x + text_width + 8
+        bg_y2 = text_y + baseline + 4
 
+        # Draw semi-transparent background for better readability
+        overlay = frame.copy()
         cv2.rectangle(
-            frame,
+            overlay,
             (bg_x1, bg_y1),
             (bg_x2, bg_y2),
             (0, 0, 0),
             thickness=-1,
         )
+        cv2.addWeighted(overlay, 0.7, frame, 0.3, 0, frame)
+        
+        # Draw pest name text
         cv2.putText(
             frame,
             label,
-            (text_x + 3, text_y - 3),
+            (text_x + 4, text_y - 4),
             font,
             font_scale,
             color,
@@ -315,7 +385,7 @@ def parse_args() -> argparse.Namespace:
         "--confidence",
         type=float,
         default=CONFIDENCE_THRESHOLD,
-        help="Confidence threshold for displaying detections (default: 0.65).",
+        help=f"Confidence threshold for displaying detections (default: {CONFIDENCE_THRESHOLD}).",
     )
     return parser.parse_args()
 
@@ -342,6 +412,11 @@ def main() -> None:
     if not cap.isOpened():
         print(f"[ERROR] Unable to open video source: {source}")
         sys.exit(1)
+    
+    # Optimize camera for low latency (if camera source)
+    if isinstance(source, int):
+        cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)  # Minimize buffer for lowest latency
+        # Don't modify resolution - use camera defaults as requested
 
     window_title = "Pest Detection Grid System"
     cv2.namedWindow(window_title, cv2.WINDOW_NORMAL)
@@ -351,6 +426,10 @@ def main() -> None:
 
     try:
         while True:
+            # Clear frame buffer to reduce latency - grab latest frame
+            for _ in range(2):  # Skip up to 2 buffered frames
+                cap.grab()
+            
             ret, frame = cap.read()
             if not ret or frame is None:
                 print("[WARN] Failed to read frame from source. Exiting loop.")
@@ -358,19 +437,25 @@ def main() -> None:
 
             frame_height, frame_width = frame.shape[:2]
 
-            # Run inference on current frame
+            # Run inference with optimized settings for SPEED
+            # Fast detection when pests are spotted
             results = model.predict(
                 frame,
-                conf=args.confidence,
+                conf=args.confidence * 0.5,  # Lower threshold for model, filter higher in post-processing
                 iou=NMS_IOU_THRESHOLD,
-                imgsz=640,
+                imgsz=INFERENCE_SIZE,  # 640px for fast inference
                 verbose=False,
-                half=False,
+                half=False,  # Keep full precision for accuracy
                 agnostic_nms=False,
-                classes=list(range(len(CLASS_NAMES))),  # Restrict to pest classes
+                max_det=100,  # Reduced from 300 for faster NMS processing
+                augment=False,  # Disabled for speed
+                stream=False,  # Single frame mode for lowest latency
             )
 
-            detections = extract_detections(results, args.confidence)
+            # Get model's class names for proper mapping
+            model_names = model.names if hasattr(model, 'names') and model.names else None
+            
+            detections = extract_detections(results, args.confidence, model_names=model_names)
 
             if detections:
                 # CLAHE enhancement first
@@ -380,7 +465,7 @@ def main() -> None:
 
                 # Draw overlays and annotations
                 draw_full_grid(frame, grid_size=args.grid_size)
-                draw_detection_annotations(frame, detections)
+                draw_detection_annotations(frame, detections, model_names=model_names)
 
             # FPS measurement
             current_time = time.time()
